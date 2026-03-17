@@ -1,0 +1,10 @@
+{
+  "name": "mailru-chat-proxy",
+  "version": "1.0.0",
+  "description": "Прокси для чата на Mail.ru",
+  "dependencies": {
+    "imap-simple": "^5.1.0",
+    "nodemailer": "^6.9.7",
+    "mailparser": "^3.6.5"
+  }
+}

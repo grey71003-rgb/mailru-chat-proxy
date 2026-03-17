@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail.ru Чат · Живой чат на почте</title>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.4/css/all.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* Стили матового стекла */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .chat-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 90vh;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            overflow: hidden;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Сайдбар */
+        .sidebar {
+            width: 280px;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            color: white;
+        }
+        
+        .rooms {
+            margin-top: 30px;
+        }
+        
+        .room-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 5px;
+        }
+        
+        .room-item:hover, .room-item.active {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .room-item i {
+            width: 24px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        /* Основной чат */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+        
+        .mail-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 30px;
+            font-size: 13px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #2ed573;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .message {
+            display: flex;
+            gap: 10px;
+            max-width: 70%;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .message.outgoing {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            flex-shrink: 0;
+        }
+        
+        .bubble {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 24px 24px 24px 8px;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        .outgoing .bubble {
+            background: rgba(30, 109, 242, 0.3);
+            border-radius: 24px 24px 8px 24px;
+        }
+        
+        .sender {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 4px;
+        }
+        
+        .text {
+            font-size: 15px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        
+        .time {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 6px;
+            text-align: right;
+        }
+        
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 40px;
+            padding: 5px 5px 5px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .input-wrapper input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 12px 5px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+        }
+        
+        .input-wrapper input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .input-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .input-actions button {
+            width: 48px;
+            height: 48px;
+            border-radius: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        
+        .input-actions button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .send-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            border: none !important;
+        }
+        
+        /* Экран входа */
+        .login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .login-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 40px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        .login-card h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+        
+        .login-card input {
+            width: 100%;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 30px;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .login-card input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 30px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .warning {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Экран входа -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <h2><i class="fas fa-envelope"></i> Mail.ru Чат</h2>
+            <input type="email" id="emailInput" placeholder="Email (например chat@mail.ru)" value="chat-helloworld@mail.ru">
+            <input type="password" id="passwordInput" placeholder="Пароль приложения (не основной!)">
+            <input type="text" id="usernameInput" placeholder="Ваше имя в чате">
+            <button class="login-btn" onclick="login()">
+                <i class="fas fa-sign-in-alt"></i> Подключиться к почте
+            </button>
+            <div class="warning">
+                <i class="fas fa-info-circle"></i> Используйте пароль приложения из настроек Mail.ru
+            </div>
+        </div>
+    </div>
+
+    <!-- Основной чат -->
+    <div class="chat-container" id="chatContainer" style="display: none;">
+        <!-- Сайдбар -->
+        <div class="sidebar">
+            <h3 style="margin-bottom: 30px;">☰ Меню</h3>
+            
+            <div style="margin-bottom: 30px;">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 20px;">
+                    <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 24px;" id="userAvatar"></div>
+                    <div>
+                        <div style="font-weight: bold;" id="userName"></div>
+                        <div style="font-size: 12px; opacity: 0.7;" id="userEmail"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="rooms">
+                <h4 style="margin-bottom: 15px;">Комнаты</h4>
+                <div class="room-item active" onclick="switchRoom('INBOX')">
+                    <i class="fas fa-inbox"></i> Общий чат
+                </div>
+                <div class="room-item" onclick="switchRoom('general')">
+                    <i class="fas fa-users"></i> General
+                </div>
+                <div class="room-item" onclick="switchRoom('random')">
+                    <i class="fas fa-random"></i> Random
+                </div>
+                <div style="margin-top: 20px;">
+                    <input type="text" id="newRoomInput" placeholder="Новая комната" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; color: white;">
+                    <button onclick="createRoom()" style="width: 100%; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; color: white;">Создать</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Чат область -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <h3 id="currentRoom">Общий чат</h3>
+                </div>
+                <div class="mail-status" id="mailStatus">
+                    <span class="status-dot"></span>
+                    <span>Подключено к почте</span>
+                </div>
+            </div>
+            
+            <div class="messages-area" id="messagesArea"></div>
+            
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <input type="text" id="messageInput" placeholder="Написать сообщение..." onkeypress="if(event.key==='Enter') sendMessage()">
+                    <div class="input-actions">
+                        <button onclick="attachImage()"><i class="fas fa-paperclip"></i></button>
+                        <button class="send-btn" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== КЛАСС ДЛЯ РАБОТЫ С ПОЧТОЙ ==========
+        class MailChat {
+            constructor() {
+                this.apiUrl = 'https://твой-проект.vercel.app/api/mail'; // Замени на свой URL
+                this.email = '';
+                this.password = '';
+                this.currentUser = '';
+                this.currentRoom = 'INBOX';
+                this.messages = [];
+                this.pollInterval = null;
+            }
+            
+            // Подключение к почте
+            async connect(email, password, username) {
+                this.email = email;
+                this.password = password;
+                this.currentUser = username;
+                
+                // Проверяем подключение
+                try {
+                    const test = await this.getMessages();
+                    if (test) {
+                        this.startPolling();
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Connection failed:', e);
+                    return false;
+                }
+            }
+            
+            // Получение сообщений из почты
+            async getMessages() {
+                try {
+                    const response = await fetch(`${this.apiUrl}?action=get&room=${this.currentRoom}&_=${Date.now()}`);
+                    const data = await response.json();
+                    
+                    if (data.ok) {
+                        this.messages = data.messages;
+                        this.renderMessages();
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Failed to get messages:', e);
+                }
+                return false;
+            }
+            
+            // Отправка сообщения (письма)
+            async sendMessage(text, image = null) {
+                try {
+                    const response = await fetch(`${this.apiUrl}?action=send&room=${this.currentRoom}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user: this.currentUser,
+                            text: text,
+                            image: image
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.ok) {
+                        // Добавляем в локальный список
+                        this.messages.push({
+                            id: data.id,
+                            user: this.currentUser,
+                            text: text,
+                            time: new Date().toISOString(),
+                            image: image
+                        });
+                        
+                        this.renderMessages();
+                    }
+                } catch (e) {
+                    console.error('Failed to send:', e);
+                }
+            }
+            
+            // Переключение комнаты
+            async switchRoom(room) {
+                this.currentRoom = room;
+                document.getElementById('currentRoom').textContent = 
+                    room === 'INBOX' ? 'Общий чат' : room;
+                await this.getMessages();
+            }
+            
+            // Рендер сообщений
+            renderMessages() {
+                const area = document.getElementById('messagesArea');
+                if (!area) return;
+                
+                area.innerHTML = this.messages.map(msg => `
+                    <div class="message ${msg.user === this.currentUser ? 'outgoing' : ''}">
+                        <div class="avatar">${msg.user ? msg.user[0].toUpperCase() : '?'}</div>
+                        <div class="bubble">
+                            ${msg.user !== this.currentUser ? `<div class="sender">${msg.user}</div>` : ''}
+                            <div class="text">${msg.text}</div>
+                            ${msg.hasAttachments ? '<div style="font-size: 11px; margin-top: 5px;">📎 Вложение</div>' : ''}
+                            <div class="time">${new Date(msg.time).toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                area.scrollTop = area.scrollHeight;
+            }
+            
+            // Запуск polling (проверка новых сообщений каждые 3 секунды)
+            startPolling() {
+                this.pollInterval = setInterval(() => {
+                    this.getMessages();
+                }, 3000);
+            }
+        }
+
+        // ========== ГЛОБАЛЬНЫЙ ЭКЗЕМПЛЯР ==========
+        const chat = new MailChat();
+
+        // ========== ФУНКЦИИ ИНТЕРФЕЙСА ==========
+        async function login() {
+            const email = document.getElementById('emailInput').value;
+            const password = document.getElementById('passwordInput').value;
+            const username = document.getElementById('usernameInput').value;
+            
+            if (!email || !password || !username) {
+                alert('Заполните все поля!');
+                return;
+            }
+            
+            // Показываем загрузку
+            const btn = document.querySelector('.login-btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подключение...';
+            
+            // Пробуем подключиться
+            const connected = await chat.connect(email, password, username);
+            
+            if (connected) {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('chatContainer').style.display = 'flex';
+                
+                // Обновляем информацию о пользователе
+                document.getElementById('userAvatar').textContent = username[0].toUpperCase();
+                document.getElementById('userName').textContent = username;
+                document.getElementById('userEmail').textContent = email;
+                
+                // Загружаем сообщения
+                await chat.getMessages();
+            } else {
+                alert('Ошибка подключения к почте. Проверьте данные.');
+                btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Подключиться к почте';
+            }
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                chat.sendMessage(text);
+                input.value = '';
+            }
+        }
+        
+        function attachImage() {
+            alert('Отправка изображений будет добавлена в следующей версии');
+        }
+        
+        function switchRoom(room) {
+            chat.switchRoom(room);
+            
+            // Обновляем активный класс
+            document.querySelectorAll('.room-item').forEach(el => {
+                el.classList.remove('active');
+            });
+            event.target.closest('.room-item').classList.add('active');
+        }
+        
+        function createRoom() {
+            const input = document.getElementById('newRoomInput');
+            const roomName = input.value.trim();
+            
+            if (roomName) {
+                alert('Создание комнаты: ' + roomName);
+                // TODO: добавить создание папки на почте
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>

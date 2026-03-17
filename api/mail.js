@@ -8,19 +8,21 @@ const MAIL_CONFIG = {
   imap: {
     user: 'chat-helloworld@mail.ru',
     password: 'Uw5dyegGhHQaVwtagSvP',
-    host: 'imap.mail.ru',
-    port: 993,
-    tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    host: 'imap.mail.ru',        // правильный сервер
+    port: 993,                    // правильный порт для IMAP
+    tls: true,                     // используем SSL
+    tlsOptions: { rejectUnauthorized: false },
+    authTimeout: 30000
   },
   smtp: {
-    host: 'smtp.mail.ru',
-    port: 465,
-    secure: true,
+    host: 'smtp.mail.ru',         // правильный сервер
+    port: 465,                     // правильный порт для SMTP
+    secure: true,                   // используем SSL
     auth: {
       user: 'chat-helloworld@mail.ru',
       pass: 'Uw5dyegGhHQaVwtagSvP'
-    }
+    },
+    tlsOptions: { rejectUnauthorized: false }
   }
 };
 
@@ -44,22 +46,34 @@ export default async function handler(req, res) {
     // ========== ПРОВЕРКА ПОДКЛЮЧЕНИЯ ==========
     if (action === 'test') {
       console.log('🔄 Тестируем подключение к Mail.ru...');
+      console.log('📧 Подключаемся к IMAP серверу:', MAIL_CONFIG.imap.host + ':' + MAIL_CONFIG.imap.port);
       
-      // Пробуем подключиться к IMAP
-      const connection = await imaps.connect(MAIL_CONFIG.imap);
-      await connection.openBox('INBOX');
-      await connection.end();
-      
-      // Пробуем отправить тестовое письмо
-      const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
-      await transporter.verify();
-      
-      console.log('✅ Подключение работает!');
-      
-      res.status(200).json({ 
-        ok: true, 
-        message: 'Подключение к Mail.ru успешно установлено' 
-      });
+      try {
+        // Пробуем подключиться к IMAP
+        const connection = await imaps.connect(MAIL_CONFIG.imap);
+        console.log('✅ IMAP подключение успешно');
+        await connection.openBox('INBOX');
+        console.log('✅ Папка INBOX открыта');
+        await connection.end();
+        
+        // Пробуем отправить тестовое письмо
+        console.log('📧 Подключаемся к SMTP серверу:', MAIL_CONFIG.smtp.host + ':' + MAIL_CONFIG.smtp.port);
+        const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
+        await transporter.verify();
+        console.log('✅ SMTP подключение успешно');
+        
+        res.status(200).json({ 
+          ok: true, 
+          message: 'Подключение к Mail.ru успешно установлено' 
+        });
+      } catch (imapError) {
+        console.error('❌ Ошибка подключения:', imapError);
+        res.status(500).json({ 
+          ok: false, 
+          error: imapError.message,
+          details: 'Ошибка подключения к серверу Mail.ru. Проверь настройки.'
+        });
+      }
     }
     
     // ========== ПОЛУЧЕНИЕ СООБЩЕНИЙ ==========

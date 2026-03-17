@@ -1,7 +1,7 @@
-// api/mail.js - Прокси для работы с почтой Mail.ru
-const imaps = require('imap-simple');
-const nodemailer = require('nodemailer');
-const { simpleParser } = require('mailparser');
+// api/mail.js - Прокси для работы с почтой Mail.ru (ES Module версия)
+import imaps from 'imap-simple';
+import nodemailer from 'nodemailer';
+import { simpleParser } from 'mailparser';
 
 // ========== ТВОИ ДАННЫЕ ==========
 const MAIL_CONFIG = {
@@ -25,7 +25,7 @@ const MAIL_CONFIG = {
 };
 
 // ========== ОБРАБОТЧИК ==========
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // Разрешаем запросы с любого домена (CORS)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -159,4 +159,4 @@ module.exports = async function handler(req, res) {
       details: 'Проверь логин и пароль приложения'
     });
   }
-};
+}

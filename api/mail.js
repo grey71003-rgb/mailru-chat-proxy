@@ -46,47 +46,31 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, message: 'SMTP работает!' });
     }
     
-    // ========== ОТПРАВКА (ВСЕГДА ВО ВХОДЯЩИЕ) ==========
+    // ========== ОТПРАВКА ==========
     else if (action === 'send') {
       const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
       
-      // Формируем письмо
-      const mailOptions = {
+      await transporter.sendMail({
         from: MAIL_CONFIG.user,
-        to: MAIL_CONFIG.user, // Отправляем себе
+        to: MAIL_CONFIG.user,
         subject: `📱 ${user}`,
         text: text || '',
         html: image ? `${text}<br><img src="${image}" style="max-width:300px">` : text,
-        // ВАЖНО: эти заголовки гарантируют, что письмо попадёт во Входящие
         headers: {
           'X-Chat-Message': 'true',
-          'X-Chat-User': user,
-          'X-Priority': '1'
+          'X-Chat-User': user
         }
-      };
+      });
       
-      // Если есть изображение
-      if (image && image.startsWith('data:image')) {
-        const base64Data = image.split(',')[1];
-        mailOptions.attachments = [{
-          filename: 'photo.jpg',
-          content: base64Data,
-          encoding: 'base64'
-        }];
-      }
-      
-      // Отправляем
-      await transporter.sendMail(mailOptions);
-      
-      return res.status(200).json({ ok: true, message: 'Отправлено во Входящие' });
+      return res.status(200).json({ ok: true, message: 'Отправлено' });
     }
     
-    // ========== ПОЛУЧЕНИЕ (ТОЛЬКО ВХОДЯЩИЕ) ==========
+    // ========== ПОЛУЧЕНИЕ ИЗ ВСЕХ ПАПОК ==========
     else if (action === 'get') {
-      const messages = await getMessagesFromInbox();
+      const messages = await getAllMessages();
       return res.status(200).json({ 
         ok: true, 
-        messages: messages,
+        messages: messages.slice(-50), // последние 50
         total: messages.length
       });
     }
@@ -104,29 +88,31 @@ module.exports = async function handler(req, res) {
   }
 };
 
-// Функция для получения писем только из Входящих
-function getMessagesFromInbox() {
+// ========== НОВЫЕ ФУНКЦИИ ДЛЯ ЧТЕНИЯ ВСЕХ ПАПОК ==========
+
+// Функция для получения писем из конкретной папки
+function getMessagesFromFolder(folderName) {
   return new Promise((resolve, reject) => {
     const imap = new Imap(MAIL_CONFIG.imap);
     const messages = [];
     
     imap.once('ready', () => {
-      imap.openBox('INBOX', false, (err, box) => {
+      imap.openBox(folderName, false, (err, box) => {
         if (err) {
-          reject(err);
+          console.log(`❌ Не удалось открыть папку ${folderName}:`, err.message);
+          resolve([]);
           return;
         }
         
-        console.log(`📬 Читаем Входящие, писем: ${box.messages.total}`);
+        console.log(`📬 Читаем папку ${folderName}, писем: ${box.messages.total}`);
         
-        // Получаем последние 50 писем
         imap.search(['ALL'], (err, results) => {
           if (err) {
-            reject(err);
+            resolve([]);
             return;
           }
           
-          const lastMessages = results.slice(-50);
+          const lastMessages = results.slice(-30);
           
           if (lastMessages.length === 0) {
             imap.end();
@@ -162,31 +148,60 @@ function getMessagesFromInbox() {
                   id: parsed.messageId || Date.now() + Math.random(),
                   user: from,
                   text: parsed.text || parsed.subject || '...',
-                  time: parsed.date || new Date().toISOString()
+                  time: parsed.date || new Date().toISOString(),
+                  folder: folderName // добавляем имя папки для отладки
                 });
                 
                 processed++;
                 if (processed === lastMessages.length) {
                   imap.end();
-                  // Сортируем по времени (старые сверху, новые снизу)
-                  messages.sort((a, b) => new Date(a.time) - new Date(b.time));
-                  resolve(messages);
                 }
               });
             });
           });
           
+          fetch.once('end', () => {
+            resolve(messages);
+          });
+          
           fetch.once('error', (err) => {
-            reject(err);
+            resolve([]);
           });
         });
       });
     });
     
     imap.once('error', (err) => {
-      reject(err);
+      console.log(`❌ Ошибка подключения к ${folderName}:`, err.message);
+      resolve([]);
     });
     
     imap.connect();
   });
+}
+
+// Функция для получения писем из ВСЕХ папок
+async function getAllMessages() {
+  // Список папок для чтения (разные названия для разных языков)
+  const folders = [
+    'INBOX',           // Входящие
+    'Sent',            // Отправленные (англ)
+    'Отправленные',    // Отправленные (рус)
+    'Drafts',          // Черновики (англ)
+    'Черновики',       // Черновики (рус)
+    'Письма себе'      // Письма себе
+  ];
+  
+  let allMessages = [];
+  
+  // Читаем каждую папку
+  for (const folder of folders) {
+    const messages = await getMessagesFromFolder(folder);
+    allMessages = [...allMessages, ...messages];
+  }
+  
+  // Сортируем по времени (старые сверху, новые снизу)
+  allMessages.sort((a, b) => new Date(a.time) - new Date(b.time));
+  
+  return allMessages;
 }

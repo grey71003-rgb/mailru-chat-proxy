@@ -1,176 +1,310 @@
-// api/mail.js - Прокси для работы с почтой Mail.ru (ES Module версия)
-import imaps from 'imap-simple';
-import nodemailer from 'nodemailer';
-import { simpleParser } from 'mailparser';
+const nodemailer = require('nodemailer');
+const Imap = require('imap');
+const { simpleParser } = require('mailparser');
 
-// ========== ТВОИ ДАННЫЕ ==========
 const MAIL_CONFIG = {
-  imap: {
-    user: 'chat-helloworld@mail.ru',
-    password: 'Uw5dyegGhHQaVwtagSvP',
-    host: 'imap.mail.ru',        // правильный сервер
-    port: 993,                    // правильный порт для IMAP
-    tls: true,                     // используем SSL
-    tlsOptions: { rejectUnauthorized: false },
-    authTimeout: 30000
-  },
+  user: 'chat-helloworld@mail.ru',
+  password: 'Uw5dyegGhHQaVwtagSvP',
+  
   smtp: {
-    host: 'smtp.mail.ru',         // правильный сервер
-    port: 465,                     // правильный порт для SMTP
-    secure: true,                   // используем SSL
+    host: 'smtp.mail.ru',
+    port: 465,
+    secure: true,
     auth: {
       user: 'chat-helloworld@mail.ru',
       pass: 'Uw5dyegGhHQaVwtagSvP'
-    },
+    }
+  },
+  
+  imap: {
+    user: 'chat-helloworld@mail.ru',
+    password: 'Uw5dyegGhHQaVwtagSvP',
+    host: 'imap.mail.ru',
+    port: 993,
+    tls: true,
     tlsOptions: { rejectUnauthorized: false }
   }
 };
 
-// ========== ОБРАБОТЧИК ==========
-export default async function handler(req, res) {
-  // Разрешаем запросы с любого домена (CORS)
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  // Обработка preflight запросов (для CORS)
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
-  const { action, room = 'INBOX' } = req.query;
-  const { user, text, image } = req.body || {};
+  const { action } = req.query;
+  const { user, text, image, room = 'general' } = req.body || {};
 
   try {
-    // ========== ПРОВЕРКА ПОДКЛЮЧЕНИЯ ==========
+    // ========== ТЕСТ ==========
     if (action === 'test') {
-      console.log('🔄 Тестируем подключение к Mail.ru...');
-      console.log('📧 Подключаемся к IMAP серверу:', MAIL_CONFIG.imap.host + ':' + MAIL_CONFIG.imap.port);
-      
-      try {
-        // Пробуем подключиться к IMAP
-        const connection = await imaps.connect(MAIL_CONFIG.imap);
-        console.log('✅ IMAP подключение успешно');
-        await connection.openBox('INBOX');
-        console.log('✅ Папка INBOX открыта');
-        await connection.end();
-        
-        // Пробуем отправить тестовое письмо
-        console.log('📧 Подключаемся к SMTP серверу:', MAIL_CONFIG.smtp.host + ':' + MAIL_CONFIG.smtp.port);
-        const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
-        await transporter.verify();
-        console.log('✅ SMTP подключение успешно');
-        
-        res.status(200).json({ 
-          ok: true, 
-          message: 'Подключение к Mail.ru успешно установлено' 
-        });
-      } catch (imapError) {
-        console.error('❌ Ошибка подключения:', imapError);
-        res.status(500).json({ 
-          ok: false, 
-          error: imapError.message,
-          details: 'Ошибка подключения к серверу Mail.ru. Проверь настройки.'
-        });
-      }
+      const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
+      await transporter.verify();
+      return res.status(200).json({ ok: true, message: 'SMTP работает!' });
     }
     
-    // ========== ПОЛУЧЕНИЕ СООБЩЕНИЙ ==========
+    // ========== ОТПРАВКА ==========
+    else if (action === 'send') {
+      const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
+      
+      // Формируем тему письма в зависимости от комнаты
+      const subject = `[${room}] ${user}`;
+      
+      // Формируем текст письма
+      let htmlContent = text || '';
+      if (image) {
+        htmlContent += `<br><img src="${image}" style="max-width: 100%;">`;
+      }
+      
+      await transporter.sendMail({
+        from: MAIL_CONFIG.user,
+        to: MAIL_CONFIG.user,
+        subject: subject,
+        text: text || '',
+        html: htmlContent,
+        headers: {
+          'X-Chat-Room': room,
+          'X-Chat-User': user
+        }
+      });
+      
+      return res.status(200).json({ ok: true, message: 'Отправлено' });
+    }
+    
+    // ========== ПОЛУЧЕНИЕ ИЗ ВСЕХ ПАПОК ==========
     else if (action === 'get') {
-      console.log('📥 Получаем сообщения из папки:', room);
+      // Список папок для чтения
+      const folders = ['INBOX', 'Отправленные', 'Письма себе', 'Sent', 'Drafts'];
+      let allMessages = [];
       
-      const connection = await imaps.connect(MAIL_CONFIG.imap);
-      await connection.openBox(room);
-      
-      // Ищем все письма
-      const searchCriteria = ['ALL'];
-      const fetchOptions = {
-        bodies: ['HEADER', 'TEXT'],
-        struct: true,
-        markSeen: false
-      };
-      
-      const messages = await connection.search(searchCriteria, fetchOptions);
-      const results = [];
-      
-      // Берем последние 50 сообщений
-      const lastMessages = messages.slice(-50);
-      
-      for (const item of lastMessages) {
-        const textPart = item.parts.find(part => part.which === 'TEXT');
-        const header = item.parts.find(part => part.which === 'HEADER');
-        
-        if (textPart && header) {
-          const parsed = await simpleParser(textPart.body);
-          
-          results.push({
-            id: item.attributes.uid,
-            user: header.body.subject[0] || 'Неизвестный',
-            text: parsed.text || parsed.html || '',
-            time: header.body.date[0] || new Date().toISOString(),
-            hasAttachments: parsed.attachments.length > 0
-          });
+      for (const folder of folders) {
+        try {
+          const folderMessages = await getMessagesFromFolder(folder);
+          allMessages = [...allMessages, ...folderMessages];
+          console.log(`📬 Папка ${folder}: ${folderMessages.length} писем`);
+        } catch (e) {
+          console.log(`❌ Ошибка чтения ${folder}:`, e.message);
         }
       }
       
-      await connection.end();
+      // Сортируем по времени
+      allMessages.sort((a, b) => new Date(a.time) - new Date(b.time));
       
-      console.log(`✅ Загружено ${results.length} сообщений`);
+      // Фильтруем по комнате если указана
+      if (room && room !== 'all') {
+        allMessages = allMessages.filter(msg => msg.room === room || msg.room === 'general');
+      }
       
-      res.status(200).json({
-        ok: true,
-        messages: results.reverse(),
-        room: room
+      return res.status(200).json({ 
+        ok: true, 
+        messages: allMessages.slice(-50), // последние 50
+        total: allMessages.length
       });
     }
     
-    // ========== ОТПРАВКА СООБЩЕНИЯ ==========
-    else if (action === 'send') {
-      console.log('📤 Отправляем сообщение от:', user);
-      
-      const transporter = nodemailer.createTransport(MAIL_CONFIG.smtp);
-      
-      const mailOptions = {
-        from: MAIL_CONFIG.smtp.auth.user,
-        to: MAIL_CONFIG.smtp.auth.user,
-        subject: user,
-        text: text,
-        html: image ? `<p>${text}</p><img src="${image}" style="max-width: 300px;">` : text,
-      };
-      
-      if (image && image.startsWith('data:image')) {
-        const base64Data = image.split(',')[1];
-        mailOptions.attachments = [{
-          filename: 'photo.jpg',
-          content: base64Data,
-          encoding: 'base64'
-        }];
-      }
-      
-      const info = await transporter.sendMail(mailOptions);
-      console.log('✅ Сообщение отправлено, ID:', info.messageId);
-      
-      res.status(200).json({ 
-        ok: true, 
-        id: info.messageId,
-        time: new Date().toISOString()
-      });
+    // ========== ПОЛУЧЕНИЕ СПИСКА ПАПОК ==========
+    else if (action === 'folders') {
+      const folders = await getFolders();
+      return res.status(200).json({ ok: true, folders });
     }
     
     else {
-      res.status(400).json({ 
-        ok: false, 
-        error: 'Укажите action: test, get или send' 
+      return res.status(200).json({ 
+        ok: true, 
+        message: 'Доступные действия: test, send, get, folders' 
       });
     }
     
   } catch (error) {
-    console.error('❌ Ошибка Mail.ru API:', error);
-    res.status(500).json({ 
-      ok: false, 
-      error: error.message,
-      details: 'Проверь логин и пароль приложения'
-    });
+    console.error('Ошибка:', error);
+    return res.status(500).json({ error: error.message });
   }
+};
+
+// Функция для получения списка папок
+function getFolders() {
+  return new Promise((resolve, reject) => {
+    const imap = new Imap(MAIL_CONFIG.imap);
+    
+    imap.once('ready', () => {
+      imap.getBoxes((err, boxes) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        const folderList = [];
+        
+        function listBoxes(boxes, path = '') {
+          for (let name in boxes) {
+            const fullPath = path ? `${path}/${name}` : name;
+            folderList.push(fullPath);
+            if (boxes[name].children) {
+              listBoxes(boxes[name].children, fullPath);
+            }
+          }
+        }
+        
+        listBoxes(boxes);
+        imap.end();
+        resolve(folderList);
+      });
+    });
+    
+    imap.once('error', (err) => {
+      reject(err);
+    });
+    
+    imap.connect();
+  });
+}
+
+// Функция для получения писем из конкретной папки
+function getMessagesFromFolder(folderName) {
+  return new Promise((resolve, reject) => {
+    const imap = new Imap(MAIL_CONFIG.imap);
+    const messages = [];
+    
+    imap.once('ready', () => {
+      // Пробуем открыть папку
+      imap.openBox(folderName, false, (err, box) => {
+        if (err) {
+          // Если папка не существует, пробуем другие варианты названия
+          const alternatives = {
+            'Письма себе': ['Письма себе', 'Self', 'Drafts'],
+            'Отправленные': ['Отправленные', 'Sent', 'Sent Messages'],
+            'INBOX': ['INBOX', 'Входящие', 'Inbox']
+          };
+          
+          const altList = alternatives[folderName] || [folderName];
+          tryNextFolder(0);
+          
+          function tryNextFolder(index) {
+            if (index >= altList.length) {
+              imap.end();
+              resolve([]);
+              return;
+            }
+            
+            imap.openBox(altList[index], false, (err2, box2) => {
+              if (err2) {
+                tryNextFolder(index + 1);
+              } else {
+                processBox(box2, altList[index]);
+              }
+            });
+          }
+        } else {
+          processBox(box, folderName);
+        }
+        
+        function processBox(box, actualFolder) {
+          console.log(`📬 Читаем папку ${actualFolder}, писем: ${box.messages.total}`);
+          
+          // Получаем последние 30 писем из папки
+          imap.search(['ALL'], (err, results) => {
+            if (err) {
+              imap.end();
+              resolve([]);
+              return;
+            }
+            
+            const lastMessages = results.slice(-30);
+            
+            if (lastMessages.length === 0) {
+              imap.end();
+              resolve([]);
+              return;
+            }
+            
+            let processed = 0;
+            const fetch = imap.fetch(lastMessages, { bodies: '' });
+            
+            fetch.on('message', (msg) => {
+              msg.on('body', (stream) => {
+                simpleParser(stream, async (err, parsed) => {
+                  if (err) return;
+                  
+                  // Определяем отправителя
+                  let from = 'Неизвестный';
+                  let room = 'general';
+                  let isOwn = false;
+                  
+                  // Проверяем заголовки
+                  if (parsed.headers) {
+                    if (parsed.headers['x-chat-user']) {
+                      from = parsed.headers['x-chat-user'];
+                    }
+                    if (parsed.headers['x-chat-room']) {
+                      room = parsed.headers['x-chat-room'];
+                    }
+                  }
+                  
+                  // Если письмо в папке "Отправленные" или "Письма себе", значит оно наше
+                  if (actualFolder === 'Отправленные' || actualFolder === 'Письма себе' || 
+                      actualFolder === 'Sent' || actualFolder === 'Drafts') {
+                    isOwn = true;
+                    
+                    // Для отправленных писем имя может быть в теме
+                    if (parsed.subject) {
+                      const match = parsed.subject.match(/\[(.*?)\]\s*(.*)/);
+                      if (match) {
+                        room = match[1];
+                        from = match[2];
+                      } else {
+                        from = parsed.subject;
+                      }
+                    }
+                  } else {
+                    // Для входящих берем из From
+                    if (parsed.from && parsed.from.text) {
+                      from = parsed.from.text.split('<')[0].trim() || 'Неизвестный';
+                      // Проверяем, не отправили ли мы это письмо сами
+                      isOwn = parsed.from.text.includes(MAIL_CONFIG.user);
+                    }
+                  }
+                  
+                  messages.push({
+                    id: parsed.messageId || Date.now() + Math.random(),
+                    user: from,
+                    text: parsed.text || parsed.subject || '...',
+                    html: parsed.html || '',
+                    time: parsed.date || new Date().toISOString(),
+                    folder: actualFolder,
+                    isOwn: isOwn,
+                    room: room,
+                    hasAttachments: parsed.attachments && parsed.attachments.length > 0
+                  });
+                  
+                  processed++;
+                  if (processed === lastMessages.length) {
+                    imap.end();
+                  }
+                });
+              });
+            });
+            
+            fetch.once('end', () => {
+              resolve(messages);
+            });
+            
+            fetch.once('error', (err) => {
+              console.log(`Ошибка чтения ${folderName}:`, err);
+              resolve([]);
+            });
+          });
+        }
+      });
+    });
+    
+    imap.once('error', (err) => {
+      console.log(`Ошибка подключения к ${folderName}:`, err);
+      resolve([]);
+    });
+    
+    imap.connect();
+  });
 }
